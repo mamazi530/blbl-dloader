@@ -26,12 +26,21 @@ def _bin_names(base: str) -> list:
 def _app_bin_dir() -> Path:
     """项目自带 bin 目录（源码模式与打包模式都适用）"""
     if getattr(sys, "frozen", False):
-        # macOS 打包为 .app 时，可执行文件在 Contents/MacOS 下，bin 与它同级
+        # onefile 打包：bin/ 会随程序解压到 sys._MEIPASS（临时目录），
+        # 不在 exe 同级 —— 必须优先查这里，否则打包后找不到 yt-dlp / ffmpeg。
+        meipass = getattr(sys, "_MEIPASS", None)
         exe_dir = Path(sys.executable).parent
-        for cand in (exe_dir / "bin", exe_dir.parent / "Resources" / "bin"):
+        cands = []
+        if meipass:
+            cands.append(Path(meipass) / "bin")
+        cands += [
+            exe_dir / "bin",                              # onedir / Windows 手动放置
+            exe_dir.parent / "Resources" / "bin",         # macOS .app 结构
+        ]
+        for cand in cands:
             if cand.exists():
                 return cand
-        return exe_dir / "bin"
+        return Path(meipass) / "bin" if meipass else exe_dir / "bin"
     return Path(__file__).resolve().parent.parent / "bin"
 
 

@@ -19,7 +19,9 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 
 # 版本号单一真源：bilidownloader/__init__.py::__version__
-_src = Path(__file__).parent / 'bilidownloader' / '__init__.py'
+# 注意：spec 由 PyInstaller exec 执行，__file__ 未定义，必须用内置的 SPECPATH
+_spec_dir = Path(globals().get('SPECPATH') or '.')
+_src = _spec_dir / 'bilidownloader' / '__init__.py'
 _m = re.search(r"__version__\s*=\s*['\"]([^'\"]+)", _src.read_text(encoding='utf-8'))
 APP_VERSION = _m.group(1) if _m else '0.0.0'
 
