@@ -10,6 +10,41 @@
 
 暂无。
 
+## [1.1.2] - 2026-10-17
+
+依据第三方全盘测试（`QA-BilibiliDownloader/QA-测试报告.md`，Horizon）修复全部 5 个缺陷。
+测试结论原为「质量门禁不通过、禁止发版」（P0×1 + P1×1，自动化针对性通过率 22%）。
+
+### 修复
+
+- **BUG-001（P0 · 致命）添加下载任务即崩溃**
+  `TaskRow.__init__` 把 `QVBoxLayout` 当 widget 传给 `lay.addWidget()`（`:110`、`:125`），
+  抛 `TypeError`，「解析 → 加入队列」核心链路完全不可用。改用 `lay.addLayout()`。
+  修复过程中另发现同类隐患：`TaskRow._paint_placeholder` 使用了未导入的 `QColor`（同样会崩溃），已补导入。
+
+- **BUG-002（P1 · 严重）登录页无"已登录"状态、无退出/返回按钮**
+  `LoginView.__init__` 无条件生成二维码、`refresh_state()` 是空实现 `pass`。
+  现重构为**单卡片两态**：已登录显示账号名 + 「退出登录」「返回」按钮，
+  未登录显示二维码；`navigate("login")` 时按登录态切换；退出后自动回到二维码态。
+
+- **BUG-003（P2）详情页「4K · 大会员」登录后仍禁用**
+  `OptionChips` 新增 `set_item_enabled()` 支持动态启用/禁用单个选项；
+  登录态变化时同步刷新（`DetailView.sync_login_state`），选中项被禁用时自动回退到可用项。
+
+- **BUG-004（P3）任务行进度条无背景轨道**
+  `bar_track` 创建后从未加入布局。重构为 track 容器 + fill 内嵌，填充宽度按轨道实际宽度计算。
+
+- **BUG-005（P4）登录用户名不持久化**
+  `DEFAULTS` 增加 `username`，`AppSettings.username` 改为可读写属性（自动落盘），
+  登录成功即保存、退出登录即清空，重启后账号卡仍显示用户名。
+
+### 验证
+
+- `verify.py` **65 项**全绿（新增 §7.2 缺陷回归 11 项，BUG-001~005 逐条断言，防止再次漏网）
+- 第三方复现脚本 `repro_test.py` **9/9 通过**（修复前 2/9）
+- 截图核对：任务行渲染正常（缩略图/底轨/徽标/操作列）、登录页已登录态展示正确
+- `screenshot.py` 12 张全量重拍通过
+
 ## [1.1.1] - 2026-10-17
 
 本次为**打包可用性修复**：v1.1.0 的代码能正常跑，但打成 Windows 单文件 exe 后 download 功能会失效。
@@ -76,7 +111,8 @@
 - 扫码登录（B 站手机 App 扫码 + 手机确认）
 - 亮色 / 暗色主题切换
 
-[未发布]: https://github.com/OWNER/REPO/compare/v1.1.1...HEAD
+[未发布]: https://github.com/OWNER/REPO/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/OWNER/REPO/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/OWNER/REPO/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/OWNER/REPO/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/OWNER/REPO/releases/tag/v1.0.0

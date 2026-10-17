@@ -31,6 +31,8 @@ DEFAULTS = {
     "skin_blur": 0,                  # 背景柔化半径 0-30
     "skin_dim": 28,                  # 遮罩强度(%)，提升文字可读性
     "skin_fit": "cover",             # cover | contain | stretch
+    # ---------- 账号（BUG-005：用户名需持久化，重启后不然退回"B 站用户"） ----------
+    "username": "",
 }
 
 
@@ -84,6 +86,16 @@ class AppSettings:
             self.cookie_file.unlink(missing_ok=True)
         except Exception:
             pass
+        self.set("username", "")
+
+    @property
+    def username(self) -> str:
+        """登录用户名（持久化在 settings.json，重启后保留）"""
+        return self.get("username", "") or ""
+
+    @username.setter
+    def username(self, v: str):
+        self.set("username", v or "")
 
     def proxy_url(self):
         """None = 不传 --proxy（走系统代理）；'' = 显式禁用代理；其他 = 自定义地址"""

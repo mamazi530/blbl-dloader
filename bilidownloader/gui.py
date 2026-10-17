@@ -547,6 +547,8 @@ class MainWindow(FramelessMixin, QMainWindow):
         self.view_settings.login_requested.connect(lambda: self.navigate("login"))
         self.view_settings.logout_requested.connect(self._logout)
         self.view_login.login_succeeded.connect(self._on_login_success)
+        self.view_login.logout_requested.connect(self._logout)
+        self.view_login.back_requested.connect(lambda: self.navigate(self._prev_page))
         self.view_home.input_url.installEventFilter(self)
         body.addWidget(self.stack, 1)
 
@@ -566,6 +568,9 @@ class MainWindow(FramelessMixin, QMainWindow):
         idx = list(views).index(key)
         self.stack.setCurrentIndex(idx)
         self._update_nav_selection(key)
+        if key == "login":
+            # BUG-002：进入登录页时按当前登录态展示（已登录则显示账号与退出）
+            self.view_login.refresh_state()
 
     def _update_nav_selection(self, key):
         self.sidebar.nav_downloading.set_selected(key in ("home", "detail"))
@@ -584,10 +589,13 @@ class MainWindow(FramelessMixin, QMainWindow):
     def _logout(self):
         self.settings.logout()
         self._refresh_login_state()
+        self.view_login.refresh_state()      # 退出后登录页回到二维码态
 
     def _refresh_login_state(self):
+        logged = self.settings.logged_in
         self.sidebar.refresh_account(self.settings)
         self.view_settings.refresh_account()
+        self.view_detail.sync_login_state(logged)   # BUG-003：登录后放开 4K
 
     def _fetch_username(self):
         """尽力获取登录用户名（失败无碍，仅影响账号卡显示）"""

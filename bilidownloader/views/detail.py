@@ -75,6 +75,24 @@ class OptionChips(QWidget):
         self._enabled = on
         self._sync()
 
+    def set_item_enabled(self, opt: str, on: bool, tip: str = ""):
+        """动态启用/禁用单个选项（如登录大会员后放开 4K）"""
+        b = self._buttons.get(opt)
+        if b is None:
+            return
+        if on:
+            self._disabled_items.pop(opt, None)
+            b.setEnabled(True)
+            b.setToolTip("")
+        else:
+            self._disabled_items[opt] = tip or "当前不可用"
+            b.setEnabled(False)
+            b.setToolTip(self._disabled_items[opt])
+            if self._selected == opt:      # 选中项被禁用时回退到第一个可用项
+                self._selected = next(
+                    (o for o in self._buttons if o not in self._disabled_items), "")
+        self._sync()
+
     def _sync(self):
         for opt, b in self._buttons.items():
             b.setChecked(opt == self._selected and self._enabled)
@@ -319,6 +337,14 @@ class DetailView(QWidget):
         self._row_画质.addWidget(self.chips_quality, 1)
         self._row_格式.addWidget(self.chips_format, 1)
         self._row_字幕.addWidget(self.chips_sub, 1)
+        self.sync_login_state()      # 按当前登录态决定 4K 是否可选
+
+    def sync_login_state(self, logged_in: bool = None):
+        """登录大会员后放开「4K · 大会员」（BUG-003）"""
+        if logged_in is None:
+            logged_in = bool(self.settings and self.settings.logged_in)
+        self.chips_quality.set_item_enabled(
+            "4K · 大会员", bool(logged_in), "需要大会员账号登录后可用")
 
     # ---------- 数据 ----------
     def load(self, info: dict):

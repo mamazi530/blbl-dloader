@@ -315,6 +315,57 @@ win.apply_skin()
 app.processEvents()
 check("窗口恢复无皮肤", not win.backdrop.has_skin and not str(win.p.bg).startswith("rgba"))
 
+# ---------------------------------------------------------------- 缺陷回归
+print("\n7.2 缺陷回归（BUG-001~BUG-005，防止再次漏网）")
+win.show()
+app.processEvents()
+
+# BUG-001：TaskRow 曾把 QVBoxLayout 当 widget 传给 addWidget，构造即 TypeError 崩溃
+from bilidownloader.views.home import TaskRow
+try:
+    _probe = Task("https://www.bilibili.com/video/BV1xx411c7mD", "out")
+    _probe.set(title="回归用例")
+    _row = TaskRow(_probe, None, theme.LIGHT)
+    check("BUG-001 任务行可构造", True)
+    # BUG-004：进度条底轨曾被创建却未挂载
+    check("BUG-004 进度条底轨已挂载",
+          _row.bar is _row.bar_track and _row.bar_track.layout() is not None
+          and _row.bar_track.layout().indexOf(_row.bar_fill) >= 0)
+except Exception as _exc:
+    check("BUG-001 任务行可构造", False, str(_exc)[:80])
+    check("BUG-004 进度条底轨已挂载", False)
+
+# BUG-002：登录页在已登录态必须展示账号卡 + 退出/返回，而不是继续弹二维码
+from unittest.mock import PropertyMock, patch
+with patch.object(AppSettings, "logged_in", new_callable=PropertyMock) as _m:
+    _m.return_value = True
+    win.view_login.refresh_state()
+    app.processEvents()
+    check("BUG-002 已登录隐藏二维码", win.view_login.qr_area.isHidden())
+    check("BUG-002 已登录显示账号区", not win.view_login.logged_area.isHidden()
+          and win.view_login.qr_area.isHidden())
+    check("BUG-002 有退出登录按钮", not win.view_login.btn_logout.isHidden())
+    check("BUG-002 有返回按钮", not win.view_login.btn_back.isHidden())
+    _m.return_value = False
+    win.view_login.refresh_state()
+    app.processEvents()
+    check("BUG-002 未登录回到二维码",
+          not win.view_login.qr_area.isHidden() and win.view_login.logged_area.isHidden())
+
+# BUG-003：登录后「4K · 大会员」必须可选，未登录时禁用
+_4k = win.view_detail.chips_quality._buttons["4K · 大会员"]
+win.view_detail.sync_login_state(True)
+check("BUG-003 登录后 4K 可选", _4k.isEnabled())
+win.view_detail.sync_login_state(False)
+check("BUG-003 未登录 4K 禁用", not _4k.isEnabled())
+
+# BUG-005：用户名必须持久化，重启后仍在
+_s = AppSettings()
+_s.username = "回归测试用户"
+check("BUG-005 用户名写入", _s.get("username") == "回归测试用户")
+check("BUG-005 用户名重载保留", AppSettings().username == "回归测试用户")
+_s.username = ""
+
 win.view_login.stop_worker()
 win.close()
 

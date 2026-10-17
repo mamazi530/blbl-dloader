@@ -4,7 +4,7 @@ URL 输入行 → 解析结果卡 → 下载队列 → 底部汇总栏（对照�
 """
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
@@ -80,13 +80,17 @@ class TaskRow(QFrame):
         self.title.setStyleSheet("font-size:13px; font-weight:500;")
         mid.addWidget(self.title)
 
-        self.bar = QFrame()
-        self.bar.setFixedHeight(6)
-        bar_lay = QHBoxLayout(self.bar)
-        bar_lay.setContentsMargins(0, 0, 0, 0)
+        # 进度条：bar_track 作底轨容器，bar_fill 叠在其内按百分比伸缩
         self.bar_track = QFrame()
+        self.bar_track.setFixedHeight(6)
+        bar_lay = QHBoxLayout(self.bar_track)
+        bar_lay.setContentsMargins(0, 0, 0, 0)
+        bar_lay.setSpacing(0)
         self.bar_fill = QFrame()
+        self.bar_fill.setFixedHeight(6)
         bar_lay.addWidget(self.bar_fill)
+        bar_lay.addStretch(1)
+        self.bar = self.bar_track      # refresh() 用 self.bar.width() 计算填充宽度
         mid.addWidget(self.bar)
 
         self.sub = QLabel()
@@ -107,7 +111,8 @@ class TaskRow(QFrame):
         self.speed.setStyleSheet("font-size:11px;")
         right.addWidget(self.speed)
         right.addStretch(1)
-        lay.addWidget(right)
+        # right / act 是 QVBoxLayout 而非 QWidget，必须用 addLayout
+        lay.addLayout(right)
 
         # 状态徽标
         self.badge = StateBadge(self.p)
@@ -122,7 +127,8 @@ class TaskRow(QFrame):
         self.btn_more = IconButton("more", self.p, tip="更多")
         self.btn_more.clicked.connect(self._on_more)
         act.addWidget(self.btn_more)
-        lay.addWidget(act)
+        # act 是 QVBoxLayout，必须用 addLayout（写成 addWidget 会 TypeError 崩溃）
+        lay.addLayout(act)
 
         task.updated.connect(self.refresh)
         self.refresh()

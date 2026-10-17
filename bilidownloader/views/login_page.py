@@ -22,6 +22,7 @@ class LoginWorker(QThread):
         super().__init__(parent)
         self.login = login
         self._stop = False
+        self.username = ""            # 登录成功后回填，供 LoginView 持久化
 
     def stop(self):
         self._stop = True
@@ -36,8 +37,9 @@ class LoginWorker(QThread):
                 should_stop=lambda: self._stop, timeout=180)
             ok = result["status"] == "success"
             if ok:
+                self.username = result.get("username") or ""
                 self.login.export_cookies()
-                self.status.emit("success", f'登录成功 · {result["username"] or "凭证已保存"}')
+                self.status.emit("success", f'登录成功 · {self.username or "凭证已保存"}')
             else:
                 self.status.emit(result["status"], result["message"])
             self.finished_ok.emit(ok)
@@ -48,17 +50,27 @@ class LoginWorker(QThread):
 
 class LoginView(QWidget):
     login_succeeded = Signal()
+    logout_requested = Signal()      # 已登录态点「退出登录」
+    back_requested = Signal()        # 点「返回」，回到进入登录页前的页面
+
+    # 单卡片两态：未登录=二维码，已登录=账号信息（BUG-002）
+    TITLE_LOGIN = "登录 B 站账号"
+    TITLE_LOGGED = "已登录"
+    SUB_LOGIN = "登录后可下载 4K 高码率、大会员专享视频与高清弹幕"
+    SUB_LOGGED = "登录信息仅保存在本机，不会上传任何服务器"
 
     def __init__(self, ctx, palette):
         super().__init__()
         self.ctx = ctx
         self.p = palette
         self.login = ctx["login"]
+        self.settings = ctx.get("settings")
         self._worker = None
         self._done = False
         self._build()
         self.retheme(palette)
-        self._start()
+        # 已登录时不应再弹二维码（BUG-002）：由 refresh_state 判断
+        self.refresh_state()
 
     # ---------- 构建 ----------
     def _build(self):
@@ -79,16 +91,22 @@ class LoginView(QWidget):
         lay.setContentsMargins(30, 28, 30, 22)
         lay.setSpacing(0)
 
-        self.title = QLabel("登录 B 站账号")
+        self.title = QLabel(self.TITLE_LOGIN)
         self.title.setAlignment(Qt.AlignCenter)
         lay.addWidget(self.title)
 
-        self.subtitle = QLabel("登录后可下载 4K 高码率、大会员专享视频与高清弹幕")
+        self.subtitle = QLabel(self.SUB_LOGIN)
         self.subtitle.setAlignment(Qt.AlignCenter)
         self.subtitle.setWordWrap(True)
         lay.addSpacing(6)
         lay.addWidget(self.subtitle)
         lay.addSpacing(18)
+
+        # ---- 未登录态：二维码 + 备选登录 ----
+        self.qr_area = QWidget()
+        qr_root = QVBoxLayout(self.qr_area)
+        qr_root.setContentsMargins(0, 0, 0, 0)
+        qr_root.setSpacing(0)
 
         # 二维码白底容器（不随主题变色）
         self.qr_frame = QFrame()
@@ -103,22 +121,28 @@ class LoginView(QWidget):
         center.addStretch(1)
         center.addWidget(self.qr_frame)
         center.addStretch(1)
-        lay.addLayout(center)
-        lay.addSpacing(14)
+        qr_root.addLayout(center)
+        qr_root.addSpacing(14)
 
         self.status = QLabel("请使用 B 站 App 扫描二维码")
         self.status.setAlignment(Qt.AlignCenter)
-        lay.addWidget(self.status)
-        lay.addSpacing(14)
+        qr_root.addWidget(self.status)
+        qr_root.addSpacing(14)
+        lay.addWidget(self.qr_area)
 
-        # 备选登录
+        # ---- 未登录态：备选登录方式 ----
+        self.alt_area = QWidget()
+        alt = QVBoxLayout(self.alt_area)
+        alt.setContentsMargins(0, 0, 0, 0)
+        alt.setSpacing(0)
+
         or_row = QHBoxLayout()
         or_row.addStretch(1)
         self.or_label = QLabel("或")
         or_row.addWidget(self.or_label)
         or_row.addStretch(1)
-        lay.addLayout(or_row)
-        lay.addSpacing(8)
+        alt.addLayout(or_row)
+        alt.addSpacing(8)
 
         btns = QHBoxLayout()
         btns.setSpacing(10)
@@ -132,8 +156,8 @@ class LoginView(QWidget):
         self.btn_cookie.setCursor(Qt.PointingHandCursor)
         self.btn_cookie.clicked.connect(self._import_cookie)
         btns.addWidget(self.btn_cookie)
-        lay.addLayout(btns)
-        lay.addSpacing(14)
+        alt.addLayout(btns)
+        alt.addSpacing(14)
 
         # 安全提示
         sec = QHBoxLayout()
@@ -144,14 +168,81 @@ class LoginView(QWidget):
         self.sec_note = QLabel("登录信息仅保存在本机，不会上传任何服务器")
         sec.addWidget(self.sec_note)
         sec.addStretch(1)
-        lay.addLayout(sec)
+        alt.addLayout(sec)
+        lay.addWidget(self.alt_area)
+
+        # ---- 已登录态：账号名 + 退出/返回 ----
+        self.logged_area = self._build_logged_area()
+        self.logged_area.hide()
+        lay.addWidget(self.logged_area)
 
         stage_lay.addWidget(self.card, 0, Qt.AlignHCenter)
         stage_lay.addStretch(1)
 
         root.addWidget(self.stage)
 
+    def _build_logged_area(self) -> QWidget:
+        """已登录态内容：账号名 + 退出登录 / 返回（BUG-002）"""
+        area = QWidget()
+        lay = QVBoxLayout(area)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        self.logged_user = QLabel("B 站用户")
+        self.logged_user.setAlignment(Qt.AlignCenter)
+        lay.addWidget(self.logged_user)
+
+        self.logged_note = QLabel("大会员专享画质、4K 与高清弹幕已解锁")
+        self.logged_note.setAlignment(Qt.AlignCenter)
+        self.logged_note.setWordWrap(True)
+        lay.addSpacing(6)
+        lay.addWidget(self.logged_note)
+        lay.addSpacing(20)
+
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        self.btn_logout = QPushButton("退出登录")
+        self.btn_logout.setObjectName("outline")
+        self.btn_logout.setCursor(Qt.PointingHandCursor)
+        self.btn_logout.clicked.connect(self.logout_requested.emit)
+        row.addWidget(self.btn_logout)
+        self.btn_back = QPushButton("返回")
+        self.btn_back.setObjectName("primary")
+        self.btn_back.setCursor(Qt.PointingHandCursor)
+        self.btn_back.clicked.connect(self.back_requested.emit)
+        row.addWidget(self.btn_back)
+        lay.addLayout(row)
+        return area
+
     # ---------- 流程 ----------
+    def refresh_state(self):
+        """切回登录页 / 登录态变化时调用：已登录展示账号态，否则展示二维码"""
+        if self.settings is not None and self.settings.logged_in:
+            self._show_logged()
+        else:
+            self._show_qr()
+
+    def _show_logged(self):
+        self.stop_worker()
+        name = (getattr(self.settings, "username", "") if self.settings else "") or "B 站用户"
+        self.title.setText(self.TITLE_LOGGED)
+        self.subtitle.setText(self.SUB_LOGGED)
+        self.qr_area.hide()
+        self.alt_area.hide()
+        self.logged_area.show()
+        self.logged_user.setText(name)
+        self.retheme(self.p)
+
+    def _show_qr(self):
+        self.title.setText(self.TITLE_LOGIN)
+        self.subtitle.setText(self.SUB_LOGIN)
+        self.logged_area.hide()
+        self.qr_area.show()
+        self.alt_area.show()
+        # 二维码线程没在跑才重启（避免重复起线程 / 打断正在扫的码）
+        if not (self._worker and self._worker.isRunning()):
+            self._start()
+
     def _start(self):
         self._done = False
         self.btn_cookie.setEnabled(False)
@@ -193,6 +284,9 @@ class LoginView(QWidget):
         self._done = ok
         self.btn_cookie.setEnabled(True)
         if ok:
+            name = getattr(self._worker, "username", "") or ""
+            if name and self.settings is not None:
+                self.settings.username = name     # 持久化，重启后账号卡仍显示（BUG-005）
             QTimer.singleShot(800, self._finish)
 
     def _finish(self):
@@ -242,6 +336,11 @@ class LoginView(QWidget):
         """)
         self.title.setStyleSheet(f"color:{p.text}; font-size:17px; font-weight:600; background:transparent;")
         self.subtitle.setStyleSheet(f"color:{p.text_dim}; font-size:12px; background:transparent;")
+        # 已登录态卡片（objectName 同为 LoginCard，卡片底板样式自动复用）
+        self.logged_user.setStyleSheet(
+            f"color:{p.accent_text}; font-size:15px; font-weight:600; background:transparent;")
+        self.logged_note.setStyleSheet(
+            f"color:{p.text_dim}; font-size:12px; background:transparent;")
         self.or_label.setStyleSheet(f"color:{p.text_faint}; font-size:11px; background:transparent;")
         self.sec_note.setStyleSheet(f"color:{p.text_faint}; font-size:11px; background:transparent;")
         self.qr_frame.setStyleSheet(f"""
@@ -250,10 +349,6 @@ class LoginView(QWidget):
                 border-radius:10px;
             }}
         """)
-
-    def refresh_state(self):
-        """从其他页面切回时，如已登录则提示"""
-        pass
 
     def stop_worker(self):
         if self._worker and self._worker.isRunning():
