@@ -1,0 +1,71 @@
+---
+name: 缺陷报告
+about: 报告一个可复现的问题
+title: "[BUG] "
+labels: bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请先确认：已按 `README.md` 执行过 `python download_deps.py`（`bin/` 下 yt-dlp 与 ffmpeg 齐备）。
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 侧边栏底部显示的版本号（如 v1.1.0）
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - 其他
+    validations:
+      required: true
+  - type: dropdown
+    id: runmode
+    attributes:
+      label: 运行方式
+      options:
+        - 源码运行（python run.py）
+        - Release 打包产物（exe / app）
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 1. ... 2. ... 3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 可附上截图（注意：截图里不要包含二维码与登录信息）
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 主界面底部「日志」面板内容，或终端输出。**请自行删除其中的 cookie / 凭证信息。**
+      render: text
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 确认
+      options:
+        - label: 我已检查日志中不含个人凭证信息
+          required: true

@@ -1,0 +1,16 @@
+# B站视频下载器 · 运行依赖
+#
+# 安装：pip install -r requirements.txt
+
+# GUI 框架（注意：本项目的 Python 发行版未编译 Tcl/Tk，故不用 tkinter）
+PySide6-Essentials>=6.6
+
+# B站扫码登录接口调用
+requests>=2.31
+
+# 二维码生成
+qrcode>=7.4
+pillow>=10.0
+
+# 视频下载核心（也可直接用 bin/yt-dlp.exe）
+yt-dlp>=2024.1.1

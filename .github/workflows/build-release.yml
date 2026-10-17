@@ -1,0 +1,96 @@
+name: Build & Release
+
+# 打 tag（如 v1.1.0）自动构建双平台产物并发布到 GitHub Release；
+# 也可在 Actions 页面手动触发。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 允许 action-gh-release 上传产物
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows x64：onefile 单 exe
+          - os: windows-latest
+            name: windows-x64
+            python: '3.11'
+          # macOS Apple Silicon（M 系列）；如需 Intel 产物，加 macos-13 一行
+          - os: macos-latest
+            name: macos-arm64
+            python: '3.11'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      # 生成 bin/ 下的 yt-dlp 与 ffmpeg（按平台自动选择构建，含 chmod +x）
+      - name: Prepare bin/
+        run: python download_deps.py
+
+      - name: Build
+        run: python build.py
+
+      # 产物校验：文件存在、体积合理、不含 data/ 凭证
+      - name: Smoke check
+        shell: bash
+        run: |
+          if [ -f dist/BilibiliDownloader.exe ]; then
+            SIZE=$(stat -c%s dist/BilibiliDownloader.exe)
+            echo "exe size: $SIZE"
+            [ "$SIZE" -gt 50000000 ] || { echo "exe 过小"; exit 1; }
+          elif [ -d dist/BilibiliDownloader.app ]; then
+            echo "app bundle ok"
+            du -sh dist/BilibiliDownloader.app
+          else
+            echo "no artifact"; exit 1
+          fi
+          # 凭证红线
+          ! find dist -name 'cookies.txt' -o -name 'settings.json' | grep -q .
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -f dist/BilibiliDownloader.exe ]; then
+            mv dist/BilibiliDownloader.exe "BilibiliDownloader-${VERSION}-win-x64.exe"
+          elif [ -d dist/BilibiliDownloader.app ]; then
+            # 打成 zip（CI 里做 dmg 需要 hdiutil 挂载，zip 同样能被 mac 用户直接使用）
+            cd dist
+            zip -r -y "../BilibiliDownloader-${VERSION}-macos-arm64.zip" BilibiliDownloader.app
+            cd ..
+          fi
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: false
+          prerelease: false
+          files: |
+            BilibiliDownloader-*-win-x64.exe
+            BilibiliDownloader-*-macos-*.zip
+
+      # 非 tag 触发（手动运行）时上传为 workflow artifact，供测试下载
+      - name: Upload artifact (workflow_dispatch)
+        uses: actions/upload-artifact@v4
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        with:
+          name: bilidownloader-${{ matrix.name }}
+          path: |
+            BilibiliDownloader-*-win-x64.exe
+            BilibiliDownloader-*-macos-*.zip

@@ -1,0 +1,64 @@
+# ---------- 用户数据（含登录凭证，严禁提交） ----------
+data/
+*.cookies
+cookies.txt
+
+# ---------- 打包产物 ----------
+build/
+dist/
+*.spec.bak
+
+# ---------- 依赖二进制（体积大，用 download_deps.py 获取） ----------
+bin/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- macOS packaging artifacts (unsigned builds) ----------
+*.app/
+*.dmg
+*.pkg
+
+# ---------- Python packaging intermediates ----------
+*.pyi
+*.manifest
+
+# ---------- 私钥 / 证书 / 环境变量（任何情况下都不得入库） ----------
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
+*.keystore
+.env
+.env.*
+!.env.example
+*.local
+secrets.json
+credentials.json
+
+# ---------- Misc local output ----------
+out/
+release/
+dist_mac/
+dist_win/
+*.log
