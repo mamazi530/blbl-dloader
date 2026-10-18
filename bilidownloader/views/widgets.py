@@ -6,7 +6,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QRectF, Signal, QRunnable, QThreadPool
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPainterPath, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QAbstractButton, QFrame, QLabel, QPushButton, QSizePolicy
 
@@ -184,35 +184,72 @@ def make_logo_pixmap(size: int = 34, bg: str = "#FB7299") -> QPixmap:
     return pm
 
 
-class _CoverJob(QRunnable):
-    """后台抓取封面图"""
+class _CoverSignals(QObject):
+    """封面加载信号。有意不带 parent、由 _CoverJob 持有强引用，
+    避免 QRunnable 被线程池回收后信号对象一起失效。"""
+    loaded = Signal(str, QImage)   # key, image（QImage 可跨线程传递）
 
-    class Signals(QObject):
-        loaded = Signal(str, QPixmap)   # key, pixmap
+
+class _CoverJob(QRunnable):
+    """后台抓取封面图：只下载 + 解码成 QImage，绝不碰 QPixmap"""
 
     def __init__(self, url: str, key: str):
         super().__init__()
         self.url, self.key = url, key
-        self.sig = self.Signals()
+        self.sig = _CoverSignals()
+        # 关掉自动析构：线程池 delete 掉 C++ 对象后，Python 包装仍可能被
+        # 队列投递引用，是 BUG-007 崩溃的根因之一。生命周期改为显式引用计数。
+        self.setAutoDelete(False)
 
     def run(self):
+        img = QImage()
         try:
             import requests
             data = requests.get(self.url, timeout=15,
                                 headers={"User-Agent": "Mozilla/5.0",
                                          "Referer": "https://www.bilibili.com/"}).content
-            pm = QPixmap()
-            pm.loadFromData(data)
-            if not pm.isNull():
-                self.sig.loaded.emit(self.key, pm)
+            img = QImage.fromData(data)     # QImage 允许在非 GUI 线程创建
         except Exception:
+            img = QImage()
+        # 成功或失败都发一次：失败发空图，用于释放 _live_cover_jobs 里的引用
+        self.sig.loaded.emit(self.key, img)
+
+
+class _CoverReceiver(QObject):
+    """常驻 GUI 线程的接收器：把 QImage 转成 QPixmap 后再回调。
+    QPixmap 只能在 GUI 线程创建；且接收者是 QObject，跨线程投递自动走
+    QueuedConnection，保证回调一定在 GUI 线程执行。"""
+
+    def __init__(self, job: "_CoverJob", callback):
+        super().__init__()
+        self._job = job
+        self._callback = callback
+        job.sig.loaded.connect(self._on_loaded)
+
+    def _on_loaded(self, key: str, img: QImage):
+        _live_cover_jobs.discard(self._job)
+        try:
+            self._job.sig.loaded.disconnect(self._on_loaded)
+        except (RuntimeError, TypeError):
             pass
+        pm = QPixmap.fromImage(img) if not img.isNull() else QPixmap()
+        if not pm.isNull() and self._callback is not None:
+            try:
+                self._callback(key, pm)
+            except RuntimeError:
+                pass            # 接收控件已销毁（窗口关闭），忽略
+        self.deleteLater()
+
+
+# 投递完成前保住 job / receiver / 回调，防止 GC 提前回收
+_live_cover_jobs: set = set()
 
 
 def fetch_cover_async(url: str, key: str, callback) -> None:
     """异步抓取封面，完成后在主线程回调 callback(key, pixmap)"""
     job = _CoverJob(url, key)
-    job.sig.loaded.connect(callback)
+    job._receiver = _CoverReceiver(job, callback)   # 引用挂在 job 上，随 job 一起释放
+    _live_cover_jobs.add(job)
     QThreadPool.globalInstance().start(job)
 
 

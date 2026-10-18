@@ -366,9 +366,68 @@ check("BUG-005 用户名写入", _s.get("username") == "回归测试用户")
 check("BUG-005 用户名重载保留", AppSettings().username == "回归测试用户")
 _s.username = ""
 
+# ---------------------------------------------------------- 崩溃回归（第二轮）
+print("\n7.3 崩溃回归（BUG-006 重入 / BUG-007 封面线程安全）")
+import inspect
+import types as _types
+from PySide6.QtCore import QBuffer, QIODevice, QThread
+from PySide6.QtGui import QImage
+
+# BUG-006：解析入口必须防重入，且不能再用「wait(100) 然后覆盖引用」的老写法
+_p_src = inspect.getsource(win.view_home.parse_url)
+check("BUG-006 parse_url 防重入", "isRunning()" in _p_src and "wait(100)" not in _p_src)
+_d_src = inspect.getsource(win.view_detail.load)
+check("BUG-006 detail.load 防重入", "isRunning()" in _d_src)
+
+# BUG-007：封面任务不得在非 GUI 线程创建 QPixmap，且不能被线程池静默析构
+from bilidownloader.views import widgets as _wg
+check("BUG-007 worker 不碰 QPixmap", "QPixmap" not in inspect.getsource(_wg._CoverJob.run))
+_job_probe = _wg._CoverJob("http://x/y.png", "probe")
+check("BUG-007 封面任务关闭自动析构", _job_probe.autoDelete() is False)
+
+# 运行时验证：注入假 requests，断言回调在 GUI 线程拿到 QPixmap
+_img = QImage(64, 36, QImage.Format_RGB32)
+_img.fill(0xFF884422)
+_buf = QBuffer()
+_buf.open(QIODevice.WriteOnly)
+_img.save(_buf, "PNG")
+_raw_png = bytes(_buf.data())
+
+
+class _FakeResp:
+    content = _raw_png
+
+
+class _FakeRequests(_types.ModuleType):
+    def get(self, *a, **k):
+        return _FakeResp()
+
+
+_orig_requests = sys.modules.get("requests")
+sys.modules["requests"] = _FakeRequests("requests")
+_got = []
+try:
+    _main_thread = app.thread()
+    _wg.fetch_cover_async(
+        "http://fake/cover.png", "verify",
+        lambda k, pm: _got.append((k, pm, QThread.currentThread() == _main_thread)))
+    _t0 = time.time()
+    while time.time() - _t0 < 5 and not _got:
+        app.processEvents()
+        time.sleep(0.02)
+finally:
+    if _orig_requests is not None:
+        sys.modules["requests"] = _orig_requests
+    else:
+        sys.modules.pop("requests", None)
+
+check("BUG-007 回调拿到 QPixmap", bool(_got) and isinstance(_got[0][1], QPixmap)
+      and _got[0][1].width() == 64)
+check("BUG-007 回调在 GUI 线程", bool(_got) and bool(_got[0][2]))
+check("BUG-007 任务引用已释放", len(_wg._live_cover_jobs) == 0)
+
 win.view_login.stop_worker()
 win.close()
-
 print("\n" + "=" * 46)
 if fail:
     print(f"失败 {len(fail)} 项: {fail}")

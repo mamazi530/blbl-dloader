@@ -589,10 +589,14 @@ class HomeView(QWidget):
         url = normalize_url(self.input_url.text())
         if not url_is_valid(url):
             return
+        # 防重入：自动解析定时器（700ms）与回车/点击「解析」可能在解析进行中
+        # 再次触发。此时若覆盖 self._parse_worker，会销毁仍在运行的 QThread
+        # （Qt 直接崩溃：QThread: Destroyed while thread is still running）。
+        # 已有一个解析线程在跑时，忽略本次请求，等它结束后再触发即可。
+        if self._parse_worker is not None and self._parse_worker.isRunning():
+            return
         self.parse_hint.setText("解析中…")
         self.parse_card.hide()
-        if self._parse_worker and self._parse_worker.isRunning():
-            self._parse_worker.wait(100)
         self._parse_worker = ParseWorker(
             self.dl, url,
             self.settings.cookie_file if self.settings.logged_in else None)

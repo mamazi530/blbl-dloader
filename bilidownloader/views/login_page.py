@@ -11,6 +11,9 @@ from .. import theme
 from ..qrcode_gen import make_qr_pixmap
 from .widgets import icon_pixmap
 
+# 退出时仍未结束的登录线程：保留强引用，避免窗口析构连带销毁运行中的 QThread
+_detached_workers: list = []
+
 
 class LoginWorker(QThread):
     """生成二维码并轮询扫码状态（复用 login.py）"""
@@ -244,6 +247,9 @@ class LoginView(QWidget):
             self._start()
 
     def _start(self):
+        # 防重入：已有登录线程在跑时不覆盖引用（覆盖 = 销毁运行中的 QThread → 崩溃）
+        if self._worker is not None and self._worker.isRunning():
+            return
         self._done = False
         self.btn_cookie.setEnabled(False)
         self.qr_label.setText("正在获取二维码…")
@@ -260,6 +266,10 @@ class LoginView(QWidget):
         if self._worker and self._worker.isRunning():
             self._worker.stop()
             self._worker.wait(3000)
+            if self._worker.isRunning():
+                # 旧线程卡在网络请求里没退出：不能覆盖引用，否则直接崩溃
+                self._set_status("上一次登录会话正在结束，请稍后重试", self.p.danger_text)
+                return
         self._start()
 
     def _on_qr(self, url: str):
@@ -353,4 +363,7 @@ class LoginView(QWidget):
     def stop_worker(self):
         if self._worker and self._worker.isRunning():
             self._worker.stop()
-            self._worker.wait(3000)
+            if not self._worker.wait(3000):
+                # 线程仍未退出：把引用放进模块级列表保住它，
+                # 否则窗口析构时会连带销毁运行中的 QThread 而崩溃。
+                _detached_workers.append(self._worker)

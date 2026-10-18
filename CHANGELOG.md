@@ -10,6 +10,38 @@
 
 暂无。
 
+## [1.1.3] - 2026-10-18
+
+针对「输入链接后应用闪退」的第二轮修复。崩溃为**原生段错误**（`exit 127/139`），
+无 Python 回溯，属于典型的 Qt 线程生命周期问题，共两处根因，均已修复并补回归断言。
+
+### 修复
+
+- **BUG-006（P0 · 致命）粘贴链接后解析重入，销毁运行中的 QThread 崩溃**
+  `HomeView.parse_url()` 无防重入保护：`textChanged` 会在 700ms 后自动解析，
+  回车/点「解析」又会立即解析；第二次进入时旧代码只 `wait(100)`（yt-dlp 抓取需 1~2s），
+  随后 `self._parse_worker = ParseWorker(...)` 覆盖引用，运行中的 `QThread` 被析构，
+  Qt 直接终止进程（`QThread: Destroyed while thread is still running`）。
+  现改为**解析线程在跑时忽略本次请求**；`DetailView.load()` 的分 P 解析有同类隐患，一并加保护；
+  登录页 `_start()` / `_refresh()` 同样补了防重入与"线程未退出就不覆盖引用"。
+
+- **BUG-007（P0 · 致命）封面图在非 GUI 线程创建 QPixmap，且信号对象被提前回收**
+  两处叠加：①`_CoverJob.run()` 在 `QThreadPool` 工作线程里 `QPixmap.loadFromData()`，
+  `QPixmap` 只允许在 GUI 线程使用；②`QRunnable` 被线程池 `autoDelete` 析构后，
+  其内部 `Signals` 对象连同 Python 包装一起失效，队列投递落到已释放内存，
+  报 `AttributeError: 'function' object has no attribute 'event'` 后崩溃。
+  现改为：worker 只下载并解码成 **`QImage`**（可跨线程），由 GUI 线程上的
+  `_CoverReceiver` 转成 `QPixmap` 再回调；`QRunnable` 关闭自动析构、
+  并在投递完成前用 `_live_cover_jobs` 保住引用，回调结束即释放。
+  修复前用假 `requests` 压测 **exit 139（SIGSEGV）**，修复后 12/12 回调、exit 0。
+
+### 测试
+
+- `verify.py` 新增 §7.3「崩溃回归」7 项（重入防护源码断言、worker 不碰 QPixmap、
+  自动析构已关闭、回调在主线程拿到 QPixmap、任务引用已释放），总数 65 → **72 项全绿**。
+- QA 侧：`regression_test.py` 16/16、`repro_crash.py` 重入复现 exit 0、
+  `e2e_verify.py` 真实链接端到端解析+入队正常。
+
 ## [1.1.2] - 2026-10-17
 
 依据第三方全盘测试（`QA-BilibiliDownloader/QA-测试报告.md`，Horizon）修复全部 5 个缺陷。
@@ -111,7 +143,8 @@
 - 扫码登录（B 站手机 App 扫码 + 手机确认）
 - 亮色 / 暗色主题切换
 
-[未发布]: https://github.com/OWNER/REPO/compare/v1.1.2...HEAD
+[未发布]: https://github.com/OWNER/REPO/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/OWNER/REPO/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/OWNER/REPO/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/OWNER/REPO/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/OWNER/REPO/compare/v1.0.0...v1.1.0

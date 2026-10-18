@@ -373,6 +373,12 @@ class DetailView(QWidget):
 
         url = info.get("webpage_url") or self._canon_url(info)
         cookie = self.settings.cookie_file if self.settings.logged_in else None
+        # 防重入：上一个分 P 解析线程仍在跑时，先等它结束，避免覆盖运行中的
+        # QThread 导致崩溃（与 home.py::parse_url 同类的 QThread 销毁问题）
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.wait(3000)
+            if self._worker.isRunning():
+                return   # 极端情况：旧 worker 超时未结束，放弃本次，等旧结果回填
         self._worker = PagesWorker(self.dl, url, cookie)
         self._worker.ok.connect(self._on_pages)
         self._worker.fail.connect(self._on_pages_fail)
