@@ -19,6 +19,26 @@ from bilidownloader.app_settings import AppSettings, CONFIG_FILE
 
 fail = []
 
+# BUG-008：自检会改真实 data/settings.json（曾经把用户的 download_dir 写成
+# D:/tmp/test、theme 写成 light，污染分发包）。这里先快照、退出时还原，
+# 保证「跑自检」不会改动用户配置（atexit 对 sys.exit(1) 同样生效）。
+import atexit
+
+_orig_settings_bytes = CONFIG_FILE.read_bytes() if CONFIG_FILE.exists() else None
+
+
+def _restore_settings():
+    try:
+        if _orig_settings_bytes is None:
+            CONFIG_FILE.unlink(missing_ok=True)
+        else:
+            CONFIG_FILE.write_bytes(_orig_settings_bytes)
+    except OSError:
+        pass
+
+
+atexit.register(_restore_settings)
+
 
 def check(name, cond, detail=""):
     print(f"  [{'PASS' if cond else 'FAIL'}] {name}{'  ' + detail if detail else ''}")
