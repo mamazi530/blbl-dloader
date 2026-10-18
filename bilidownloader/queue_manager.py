@@ -108,6 +108,19 @@ class DownloadWorker(QThread):
                 rate_limit=self.rate_limit, proxy=self.proxy or None,
                 auto_merge=self.auto_merge, cmd=t._cmd,
             )
+            # 记下成片路径与真实大小，供「已完成」行打开文件 / 显示体积
+            # （直接写属性、不发信号：这里还在工作线程，_on_done 会统一 emit）
+            out = getattr(self.dl, "last_output", None)
+            if code == 0 and out:
+                from pathlib import Path
+                from .downloader import human_size
+                p = Path(out)
+                try:
+                    if p.exists():
+                        t.filepath = str(p)
+                        t.size_text = human_size(p.stat().st_size)
+                except OSError:
+                    pass
         except Exception as exc:
             self.log.emit(f"下载异常: {exc}")
             code = -1

@@ -446,6 +446,48 @@ check("BUG-007 回调拿到 QPixmap", bool(_got) and isinstance(_got[0][1], QPix
 check("BUG-007 回调在 GUI 线程", bool(_got) and bool(_got[0][2]))
 check("BUG-007 任务引用已释放", len(_wg._live_cover_jobs) == 0)
 
+# ---------------------------------------------------------- 完成态与后处理（第三轮）
+print("\n7.4 完成态回归（BUG-009 后处理失败误判为下载失败）")
+from bilidownloader.downloader import (Downloader as _DL, resolve_exit_code,
+                                       looks_complete as _looks_complete)
+import tempfile as _tempfile
+
+_tmpd = Path(_tempfile.mkdtemp(prefix="blbl_v_"))
+_fake_media = _tmpd / "done.mp4"
+_fake_media.write_bytes(b"0" * 300_000)      # 300KB，超过阈值
+
+# 非 0 退出码但成片完整 → 必须判成功（否则用户看到「失败」而文件其实是好的）
+check("BUG-009 非0但成品完整→成功", resolve_exit_code(1, _fake_media)[0] == 0)
+check("BUG-009 非0且无成品→失败", resolve_exit_code(1, None)[0] == 1)
+check("BUG-009 .part 不算成品", not _looks_complete(Path(str(_fake_media) + ".part")))
+check("BUG-009 过小残片不算成品", not _looks_complete(__file__ and Path("verify.py")))
+
+# 缺 ffprobe 时不能加 --embed-thumbnail（否则 yt-dlp 末尾报错退出非 0）
+_no_probe = _DL(ffmpeg_dir=_tmpd)
+check("BUG-009 无 ffprobe 识别正确", _no_probe.has_ffprobe is False)
+_cmd_noprobe = _no_probe.build_download_cmd("https://www.bilibili.com/video/BV1xx411c7mD",
+                                            _tmpd, "720P", None, True, True, "", None, True)
+check("BUG-009 无 ffprobe 不嵌封面", "--write-thumbnail" in _cmd_noprobe
+      and "--embed-thumbnail" not in _cmd_noprobe)
+
+# 有 ffprobe 时应恢复嵌入
+(_tmpd / "ffprobe.exe").write_bytes(b"stub")
+_probe = _DL(ffmpeg_dir=_tmpd)
+_cmd_probe = _probe.build_download_cmd("https://www.bilibili.com/video/BV1xx411c7mD",
+                                       _tmpd, "720P", None, True, True, "", None, True)
+check("BUG-009 有 ffprobe 才嵌封面", _probe.has_ffprobe is True
+      and "--embed-thumbnail" in _cmd_probe)
+
+# 完成态行：显示体积/文件名，主按钮可播放
+_row_done = TaskRow(Task("https://www.bilibili.com/video/BV1xx411c7mD", _tmpd), None, theme.LIGHT)
+_row_done.task.filepath = str(_fake_media)
+_row_done.task.size_text = "293.0 KB"
+_row_done.task.set(state=TaskState.DONE, percent=100.0)
+check("BUG-009 完成行显示体积", "293.0 KB" in _row_done.sub.text())
+check("BUG-009 完成行主按钮为播放", _row_done.btn_main.icon_name == "play")
+import shutil as _shutil
+_shutil.rmtree(_tmpd, ignore_errors=True)
+
 win.view_login.stop_worker()
 win.close()
 print("\n" + "=" * 46)

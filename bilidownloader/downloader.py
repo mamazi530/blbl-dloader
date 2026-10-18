@@ -149,12 +149,51 @@ def fmt_duration(sec) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
+_MEDIA_EXTS = {".mp4", ".mkv", ".flv", ".webm", ".mov", ".m4a", ".mp3", ".aac", ".opus"}
+
+
+def looks_complete(out_path: Optional[Path], min_bytes: int = 200_000) -> bool:
+    """成片是否已完整落盘（排除 .part 与过小的残片）"""
+    if not out_path:
+        return False
+    p = Path(out_path)
+    try:
+        return (p.exists() and p.suffix.lower() in _MEDIA_EXTS
+                and not p.name.endswith(".part") and p.stat().st_size >= min_bytes)
+    except OSError:
+        return False
+
+
+def resolve_exit_code(rc: int, out_path: Optional[Path]) -> tuple:
+    """
+    把 yt-dlp 退出码翻译成「任务结果」。
+    视频已完整落盘时，非 0 只可能来自后处理（嵌封面/嵌字幕失败等），
+    产物本身可用，视为成功，避免「下载成功却显示失败」（BUG-009）。
+    返回 (结果码, 备注)；备注非空时应在日志里提示。
+    """
+    if rc == 0:
+        return 0, ""
+    if looks_complete(out_path):
+        return 0, f"后处理未完成，但视频已保存（{human_size(out_path.stat().st_size)}）"
+    return rc, ""
+
+
 class Downloader:
     """yt-dlp 封装"""
 
     def __init__(self, ffmpeg_dir: Path = None):
         self.ffmpeg_dir = ffmpeg_dir or resource_bin_dir()
         self.ytdlp = find_ytdlp()
+        # 最近一次下载的成片路径（尽力而为，供 UI「打开文件」用）
+        self.last_output: Optional[Path] = None
+        # bin/ 里通常只有 ffmpeg、没有 ffprobe；嵌封面必须两个都在
+        self.has_ffprobe = self._detect_ffprobe()
+
+    def _detect_ffprobe(self) -> bool:
+        for name in _bin_names("ffprobe"):
+            if (Path(self.ffmpeg_dir) / name).exists():
+                return True
+        return shutil.which("ffprobe") is not None
 
     def available(self) -> bool:
         return self.ytdlp is not None
@@ -246,7 +285,13 @@ class Downloader:
         if want_subtitle:
             cmd += ["--write-subs", "--write-auto-subs", "--sub-langs", "zh.*,en.*", "--embed-subs"]
         if want_thumbnail:
-            cmd += ["--write-thumbnail", "--embed-thumbnail"]
+            # 只保存封面，不强嵌。嵌封面（--embed-thumbnail）需要 ffmpeg + ffprobe，
+            # 而 bin/ 里通常只有 ffmpeg → yt-dlp 末尾报
+            # "Unable to embed using ffprobe & ffmpeg" 并以非 0 退出，
+            # 此时视频其实已合并完成，会被误判为失败（BUG-009）。有 ffprobe 才嵌。
+            cmd += ["--write-thumbnail"]
+            if self.has_ffprobe:
+                cmd += ["--embed-thumbnail"]
         cmd.append(url)
         return cmd
 
@@ -289,6 +334,8 @@ class Downloader:
             bufsize=1, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         self._last_proc = proc
+        self.last_output = None
+        out_path: Optional[Path] = None        # 本次下载的成片（合并后路径优先）
 
         pct_re = re.compile(r"\[download\]\s+(\d+\.\d)%")
         speed_re = re.compile(r"([\d.]+\w?i?B/s)")
@@ -309,6 +356,20 @@ class Downloader:
             line = _ANSI.sub("", line.rstrip())
             if not line:
                 continue
+
+            # 记录成片路径：合并后的路径优先（Merger 一定出现在各分片之后）
+            if "[Merger]" in line and " into " in line:
+                cand = line.split(" into ", 1)[1].strip().strip('"')
+                if cand:
+                    out_path = Path(cand)
+            elif line.startswith("[download] Destination:") or line.startswith("[ExtractAudio] Destination:"):
+                cand = line.split("Destination:", 1)[1].strip().strip('"')
+                if cand and not cand.endswith(".part"):
+                    out_path = Path(cand)
+            elif "has already been downloaded" in line:
+                m2 = re.search(r"\[download\]\s+(.+?)\s+has already been downloaded", line)
+                if m2:
+                    out_path = Path(m2.group(1).strip('"'))
 
             if on_progress:
                 m = pct_re.search(line)
@@ -332,7 +393,14 @@ class Downloader:
                 on_log(line)
 
         proc.wait()
-        return proc.returncode
+
+        if looks_complete(out_path):
+            self.last_output = out_path
+
+        code, note = resolve_exit_code(proc.returncode, out_path)
+        if note and on_log:
+            on_log(f"提示：{note}")
+        return code
 
     def stop(self):
         """强制终止当前下载进程（暂停的第一步）"""

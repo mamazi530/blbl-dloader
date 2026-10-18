@@ -8,6 +8,31 @@
 
 ## [未发布]
 
+暂无。
+
+## [1.1.4] - 2026-10-18
+
+### 修复
+
+- **BUG-009（P1 · 严重）视频下载成功，应用却显示「失败」**
+  根因：`bin/` 只有 `ffmpeg.exe`、没有 `ffprobe.exe`。命令里带的
+  `--embed-thumbnail` 在缺 ffprobe 时无法嵌入封面，yt-dlp 末尾抛
+  `ERROR: Postprocessing: Unable to embed using ffprobe & ffmpeg` 并以**退出码 1** 结束；
+  而此刻 mp4 早已合并完成 —— 应用只看退出码，于是把成功判成失败。
+  修复分三层：
+  1. **不强行嵌封面**：检测到无 ffprobe 时只 `--write-thumbnail`（封面存为同名 .jpg），
+     有 ffprobe 才加 `--embed-thumbnail`；
+  2. **以产物为准**：新增 `resolve_exit_code()`，非 0 退出码但成片已完整落盘
+     （≥200KB、非 `.part`、媒体扩展名）时判为成功，并在日志提示「后处理未完成，但视频已保存」；
+  3. **记录成片路径**：`Downloader.last_output` 回填到 `Task.filepath` / `size_text`。
+
+### 优化（下载完成后的界面）
+
+- 完成行副标题改为 `画质 · 体积 · 已保存`（成功绿），完整路径放进 tooltip，不再被长文件名挤乱；
+- 主按钮变成「▶ 播放视频」，点一下用系统播放器打开成片；双击任务行同样可播放；
+- 「更多」菜单新增**播放视频**/**复制文件路径**，路径失效时自动回退到所在文件夹；
+- 长标题按行宽自动省略，避免挤掉右侧状态与按钮。
+
 ### 修复（工具链）
 
 - **BUG-008（P3）`verify.py` 污染用户真实配置**
@@ -149,7 +174,8 @@
 - 扫码登录（B 站手机 App 扫码 + 手机确认）
 - 亮色 / 暗色主题切换
 
-[未发布]: https://github.com/OWNER/REPO/compare/v1.1.3...HEAD
+[未发布]: https://github.com/OWNER/REPO/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/OWNER/REPO/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/OWNER/REPO/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/OWNER/REPO/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/OWNER/REPO/compare/v1.1.0...v1.1.1

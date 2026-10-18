@@ -61,6 +61,7 @@ class TaskRow(QFrame):
         self.p = palette
         self.setObjectName("TaskRow")
         self._cover_pm = None
+        self._title_full = task.title
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(14, 12, 14, 12)
@@ -143,12 +144,20 @@ class TaskRow(QFrame):
             self.view.manager.resume(self.task.id)
         elif st == TaskState.FAILED:
             self.view.manager.retry(self.task.id)
+        elif st == TaskState.DONE:
+            self._open_file()
 
     def _on_more(self):
         import os
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         if self.task.state == TaskState.DONE:
+            if self.task.filepath:
+                a_play = menu.addAction("播放视频")
+                a_play.triggered.connect(self._open_file)
+                a_copy = menu.addAction("复制文件路径")
+                a_copy.triggered.connect(self._copy_path)
+                menu.addSeparator()
             a_open = menu.addAction("打开所在文件夹")
             a_open.triggered.connect(self._open_folder)
             a_retry = menu.addAction("重新下载")
@@ -163,10 +172,29 @@ class TaskRow(QFrame):
         a_del.triggered.connect(lambda: self.view.manager.remove(self.task.id))
         menu.exec(self.btn_more.mapToGlobal(self.btn_more.rect().bottomLeft()))
 
+    def _open_file(self):
+        """用系统默认播放器打开成片；文件已被移动则退回归属文件夹"""
+        import os
+        from pathlib import Path
+        p = Path(self.task.filepath) if self.task.filepath else None
+        if p and p.exists():
+            try:
+                os.startfile(str(p))
+                return
+            except OSError:
+                pass
+        self._open_folder()
+
+    def _copy_path(self):
+        from PySide6.QtWidgets import QApplication
+        if self.task.filepath:
+            QApplication.clipboard().setText(self.task.filepath)
+
     def _open_folder(self):
         import os
         from pathlib import Path
-        d = Path(self.task.output_dir)
+        p = Path(self.task.filepath) if self.task.filepath else None
+        d = p.parent if p and p.exists() else Path(self.task.output_dir)
         if d.exists():
             os.startfile(d)
 
@@ -207,9 +235,28 @@ class TaskRow(QFrame):
         self.thumb.setPixmap(pm)
 
     # ---------- 刷新 ----------
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._fit_title()
+
+    def mouseDoubleClickEvent(self, ev):
+        # 双击已完成的任务 = 直接播放；下载中/失败则忽略
+        if self.task.state == TaskState.DONE and self.task.filepath:
+            self._open_file()
+        super().mouseDoubleClickEvent(ev)
+
+    def _fit_title(self):
+        """长标题按可用宽度省略，不挤掉右侧的速度/徽标/按钮"""
+        avail = self.width() - 96 - 14 * 4 - 96 - 92 - 64
+        if avail < 120:
+            avail = max(80, self.width() - 300)
+        self.title.setText(self.title.fontMetrics().elidedText(
+            self._title_full, Qt.ElideRight, avail))
+
     def refresh(self):
         t = self.task
         p = self.p
+        self._title_full = t.title
         self.title.setText(t.title)
 
         st = t.state
@@ -225,9 +272,13 @@ class TaskRow(QFrame):
         if running:
             self.sub.setText(t.meta or f"{t.quality} · {t.size_text}")
         elif st == TaskState.DONE:
-            self.sub.setText(f"{t.quality} · 已保存到 {t.output_dir}")
+            # 完成态：画质 + 体积 + 状态；完整路径放 tooltip，避免长文件名挤乱行
+            size = t.size_text or "已保存"
+            self.sub.setText(f"{t.quality} · {size} · 已保存")
+            self.sub.setToolTip(t.filepath or t.output_dir)
         elif st == TaskState.FAILED:
             self.sub.setText(t.error or "下载失败")
+            self.sub.setToolTip(t.error or "")
         elif st == TaskState.PAUSED:
             self.sub.setText(f"{t.quality} · 已暂停，可继续下载")
         else:
@@ -266,13 +317,19 @@ class TaskRow(QFrame):
             self.btn_main.icon_name = "retry"
             self.btn_main.setToolTip("重试")
         elif st == TaskState.DONE:
-            self.btn_main.icon_name = "folder"
-            self.btn_main.setToolTip("打开文件夹")
+            # 有成品就播一下，没有就退回归属文件夹
+            if t.filepath:
+                self.btn_main.icon_name = "play"
+                self.btn_main.setToolTip("播放视频")
+            else:
+                self.btn_main.icon_name = "folder"
+                self.btn_main.setToolTip("打开文件夹")
         else:
             self.btn_main.icon_name = "more"
             self.btn_main.setToolTip("等待中")
         self.btn_main.restyle()
         self.restyle_row()
+        self._fit_title()
 
     def restyle_row(self):
         p = self.p
@@ -284,7 +341,12 @@ class TaskRow(QFrame):
             QFrame#TaskRow QLabel {{ background:transparent; border:none; }}
         """)
         self.title.setStyleSheet(f"color:{p.text}; font-size:13px; font-weight:500; background:transparent;")
-        self.sub.setStyleSheet(f"color:{p.text_muted}; font-size:11px; background:transparent;")
+        sub_color = p.text_muted
+        if self.task.state == TaskState.DONE:
+            sub_color = p.success_text
+        elif self.task.state == TaskState.FAILED:
+            sub_color = p.danger_text
+        self.sub.setStyleSheet(f"color:{sub_color}; font-size:11px; background:transparent;")
         self.pct.setStyleSheet(f"color:{p.text_secondary}; font-size:12px; background:transparent;")
         self.speed.setStyleSheet(f"color:{p.text_muted}; font-size:11px; background:transparent;")
         self.badge.pal = p
