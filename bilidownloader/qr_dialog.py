@@ -143,7 +143,7 @@ class QRLoginDialog(QDialog):
         self.progress.setFixedHeight(3)
         self.progress.setTextVisible(False)
         self.progress.setStyleSheet(
-            f"QProgressBar {{ background:{self.p.surface_hi}; border:none;"
+            f"QProgressBar {{ background:{self.p.bg_subtle}; border:none;"
             f"border-radius:2px; }} QProgressBar::chunk {{ background:{self.p.accent};"
             f"border-radius:2px; }}"
         )

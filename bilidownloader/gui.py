@@ -108,10 +108,11 @@ class Backdrop(QWidget):
             return
         p = QPainter(self)
         p.drawPixmap(0, 0, pm)
-        if self._dim > 0:
-            c = QColor(self._dim_color)
-            c.setAlphaF(max(0.0, min(1.0, self._dim / 100.0)))
-            p.fillRect(self.rect(), c)
+        # 12% 下限：遮罩过低时浅色壁纸上的文字会失去对比度
+        dim = max(12, self._dim)
+        c = QColor(self._dim_color)
+        c.setAlphaF(max(0.0, min(1.0, dim / 100.0)))
+        p.fillRect(self.rect(), c)
         p.end()
 
 
@@ -336,10 +337,10 @@ class Sidebar(QFrame):
         pal = self.p
         logged = settings.logged_in
         name = "未登录"
-        desc = "登录解锁 4K 高码率"
+        desc = "登录解锁 1080P 高码率 / 4K"
         if logged:
             name = getattr(settings, "username", "") or "B 站用户"
-            desc = "已登录 · 可下载高清画质"
+            desc = "已登录 · 可下载 1080P 高码率 / 4K"
         self.account.setText("")
         self.account.setIcon(AvatarPixmap.make(30, pal.bg_control, pal.text_faint))
         self.account.setLayout(None)

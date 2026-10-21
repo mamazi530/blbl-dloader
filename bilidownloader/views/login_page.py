@@ -59,7 +59,7 @@ class LoginView(QWidget):
     # 单卡片两态：未登录=二维码，已登录=账号信息（BUG-002）
     TITLE_LOGIN = "登录 B 站账号"
     TITLE_LOGGED = "已登录"
-    SUB_LOGIN = "登录后可下载 4K 高码率、大会员专享视频与高清弹幕"
+    SUB_LOGIN = "登录后可下载 1080P 高码率 / 4K（需大会员）与高清弹幕"
     SUB_LOGGED = "登录信息仅保存在本机，不会上传任何服务器"
 
     def __init__(self, ctx, palette):

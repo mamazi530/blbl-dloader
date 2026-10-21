@@ -24,7 +24,7 @@ DEFAULTS = {
     "default_quality": "1080P 高码率",
     "rate_limit": "",                # '' = 不限速；'500K' / '2M' …
     "proxy_mode": "none",            # none | system | custom
-    "proxy_url": "",
+    "proxy_url": "",                 # custom 模式下的代理地址
     # ---------- 皮肤（窗口背景） ----------
     "skin_id": "",                   # '' = 不使用皮肤；预设 id 或 img_xxx
     "skin_alpha": 88,                # 面板不透明度(%)，越低壁纸越明显

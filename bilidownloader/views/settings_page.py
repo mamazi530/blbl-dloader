@@ -6,8 +6,8 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QScrollArea, QSlider, QSpinBox, QVBoxLayout,
-    QWidget,
+    QLineEdit, QMessageBox, QPushButton, QScrollArea, QSlider, QSpinBox,
+    QVBoxLayout, QWidget,
 )
 
 from .. import skin as skin_mod
@@ -185,7 +185,7 @@ class SettingsView(QWidget):
 
         g0.addWidget(divider())
         self.row_dim = self._slider_row(
-            "遮罩强度", "在背景图上叠一层底色，保证文字清晰", "skin_dim", 0, 60)
+            "遮罩强度", "在背景图上叠一层底色，保证文字清晰（最低 12%）", "skin_dim", 12, 60)
         g0.addWidget(self.row_dim)
 
         g0.addWidget(divider())
@@ -267,6 +267,17 @@ class SettingsView(QWidget):
         combo_proxy.currentTextChanged.connect(self._on_proxy_mode)
         self.row_proxy = SettingRow("网络代理", "使用系统代理或自定义代理服务器", combo_proxy, self.p)
         g2.addWidget(self.row_proxy)
+
+        self.edit_proxy = QLineEdit()
+        self.edit_proxy.setPlaceholderText("http://127.0.0.1:7890")
+        self.edit_proxy.setFixedWidth(220)
+        self.edit_proxy.setText(self.settings.get("proxy_url", ""))
+        self.edit_proxy.textChanged.connect(
+            lambda v: self.settings.set("proxy_url", v.strip()))
+        self.row_proxy_url = SettingRow(
+            "代理地址", "支持 http:// 或 socks5:// 前缀", self.edit_proxy, self.p)
+        self.row_proxy_url.setVisible(self.settings.get("proxy_mode", "none") == "custom")
+        g2.addWidget(self.row_proxy_url)
         root.addWidget(self._wrap_card(g2))
 
         # ===== 账号 =====
@@ -356,6 +367,7 @@ class SettingsView(QWidget):
     def _on_proxy_mode(self, text):
         mapping = {"不使用": "none", "使用系统代理": "system", "自定义": "custom"}
         self.settings.set("proxy_mode", mapping.get(text, "none"))
+        self.row_proxy_url.setVisible(text == "自定义")
 
     def _on_fit(self, text):
         mapping = {"填充（裁切铺满）": "cover", "适应（完整显示）": "contain",
@@ -443,11 +455,11 @@ class SettingsView(QWidget):
         p = self.p
         logged = self.settings.logged_in
         if logged:
-            self.row_account.desc_lbl.setText("已登录 · 可下载 4K 高码率、大会员专享内容与高清弹幕")
+            self.row_account.desc_lbl.setText("已登录 · 可下载 1080P 高码率 / 4K（需大会员）与高清弹幕")
             self.btn_login.setText("重新登录")
             self.btn_logout.setVisible(True)
         else:
-            self.row_account.desc_lbl.setText("未登录 · 登录后可下载 4K 高码率、大会员专享内容与高清弹幕")
+            self.row_account.desc_lbl.setText("未登录 · 登录后可下载 1080P 高码率 / 4K（需大会员）与高清弹幕")
             self.btn_login.setText("去登录")
             self.btn_logout.setVisible(False)
 

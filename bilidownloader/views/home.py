@@ -509,6 +509,7 @@ class HomeView(QWidget):
         self.parse_card = ParseCard(self, self.p)
         root.addWidget(self.parse_card)
         self.parse_hint = QLabel("")
+        self.parse_hint.setWordWrap(True)
         root.addWidget(self.parse_hint)
 
         root.addWidget(self._queue_header())
@@ -639,11 +640,19 @@ class HomeView(QWidget):
         return w
 
     # ---------- 解析 ----------
+    def _set_parse_hint(self, text, error=False):
+        """统一的解析状态提示：错误用危险色，其余用弱化色"""
+        self.parse_hint.setText(text)
+        color = self.p.danger if error else self.p.text_muted
+        weight = "600" if error else "400"
+        self.parse_hint.setStyleSheet(
+            f"color:{color}; font-size:12px; font-weight:{weight}; background:transparent;")
+
     def _on_url_changed(self, text):
         self.btn_parse.setEnabled(url_is_valid(text))
         if not url_is_valid(text):
             self.parse_card.hide()
-            self.parse_hint.setText("")
+            self._set_parse_hint("")
             return
         if self._info_timer:
             self._info_timer.stop()
@@ -662,7 +671,7 @@ class HomeView(QWidget):
         # 已有一个解析线程在跑时，忽略本次请求，等它结束后再触发即可。
         if self._parse_worker is not None and self._parse_worker.isRunning():
             return
-        self.parse_hint.setText("解析中…")
+        self._set_parse_hint("解析中…")
         self.parse_card.hide()
         self._parse_worker = ParseWorker(
             self.dl, url,
@@ -672,10 +681,10 @@ class HomeView(QWidget):
         self._parse_worker.start()
 
     def _on_parse_fail(self, msg):
-        self.parse_hint.setText(f"解析失败：{msg[:120]}")
+        self._set_parse_hint(f"解析失败：{msg[:120]}", error=True)
 
     def _on_parsed(self, info: dict):
-        self.parse_hint.setText("")
+        self._set_parse_hint("")
         self.parse_card.show_info(info)
 
     def enqueue_parsed(self, info: dict, quality: str):
