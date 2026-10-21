@@ -1,12 +1,12 @@
 """
-下载运行所需的第三方二进制（yt-dlp / ffmpeg）到 bin/。
+下载运行所需的第三方二进制（yt-dlp / ffmpeg / ffprobe）到 bin/。
 
-这些文件体积大（约 87MB），不适合放进版本库，
+这些文件体积大（约 218MB），不适合放进版本库，
 新环境首次运行时执行本脚本即可准备。
 
 按当前平台自动选择对应的构建：
-    Windows → yt-dlp.exe + ffmpeg.exe（gyan.dev essentials 构建）
-    macOS   → yt-dlp（官方 macOS 构建）+ ffmpeg（evermeet.cx 构建）
+    Windows → yt-dlp.exe + ffmpeg.exe + ffprobe.exe（gyan.dev essentials 构建）
+    macOS   → yt-dlp（官方 macOS 构建）+ ffmpeg（evermeet.cx 构建，不含 ffprobe）
     Linux   → yt-dlp（官方二进制）；ffmpeg 请用系统包管理器安装
 
 用法：
@@ -113,26 +113,39 @@ def _download_zip(url: str, tmp_zip: Path) -> bool:
     return True
 
 
-def _pick_member(names: list) -> str | None:
-    wanted = "ffmpeg.exe" if IS_WIN else "ffmpeg"
-    for n in names:
-        if Path(n).name.lower() == wanted:
-            return n
-    for n in names:
-        if Path(n).name.lower().startswith("ffmpeg"):
-            return n
-    return None
+def _pick_members(names: list) -> dict[str, str]:
+    """从 zip 中选出需要的可执行文件（Windows: ffmpeg + ffprobe）"""
+    wanted = ["ffmpeg.exe", "ffprobe.exe"] if IS_WIN else ["ffmpeg"]
+    found = {}
+    for want in wanted:
+        base = want.split(".")[0]
+        member = next((n for n in names if Path(n).name.lower() == want), None)
+        if member is None:
+            member = next((n for n in names if Path(n).name.lower().startswith(base)), None)
+        if member:
+            found[want] = member
+    return found
+
+
+def _ready(base: str) -> bool:
+    """bin/ 下该可执行文件是否已完整下载"""
+    dest = BIN_DIR / _target_name(base)
+    return dest.exists() and dest.stat().st_size > 20 * 1024 * 1024
 
 
 def download_ffmpeg(force: bool = False) -> bool:
-    dest = BIN_DIR / _target_name("ffmpeg")
-    if dest.exists() and dest.stat().st_size > 20 * 1024 * 1024 and not force:
-        print(f"[跳过] {dest.name} 已存在 ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
-        _make_executable(dest)
+    tools = ["ffmpeg", "ffprobe"] if IS_WIN else ["ffmpeg"]
+    missing = [t for t in tools if force or not _ready(t)]
+
+    if not missing:
+        for t in tools:
+            dest = BIN_DIR / _target_name(t)
+            print(f"[跳过] {dest.name} 已存在 ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
+            _make_executable(dest)
         return True
 
     if not (IS_WIN or IS_MAC):
-        print("[提示] Linux 请用系统包管理器安装 ffmpeg：")
+        print("[提示] Linux 请用系统包管理器安装 ffmpeg（含 ffprobe）：")
         print("    Debian/Ubuntu: sudo apt install ffmpeg")
         print("    Fedora:        sudo dnf install ffmpeg")
         print("    Arch:          sudo pacman -S ffmpeg")
@@ -147,25 +160,30 @@ def download_ffmpeg(force: bool = False) -> bool:
         return False
 
     print("  解压中...")
-    found = False
+    extracted = []
     try:
         with zipfile.ZipFile(tmp_zip) as zf:
             names = [n for n in zf.namelist() if not n.endswith("/")]
-            member = _pick_member(names)
-            if member:
-                with zf.open(member) as src, open(dest, "wb") as dst:
+            for want, member in _pick_members(names).items():
+                base = want.split(".")[0]
+                if base not in missing:
+                    continue
+                with zf.open(member) as src, open(BIN_DIR / _target_name(base), "wb") as dst:
                     shutil.copyfileobj(src, dst)
-                found = True
+                extracted.append(base)
     except Exception as exc:
         print(f"  解压失败: {exc}")
     _cleanup(tmp_zip)
 
-    if not found:
-        print("  压缩包中未找到 ffmpeg 可执行文件")
-        return False
+    for base in extracted:
+        dest = BIN_DIR / _target_name(base)
+        _make_executable(dest)
+        print(f"  完成 {dest.name} ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
 
-    _make_executable(dest)
-    print(f"  完成 ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
+    absent = [t for t in missing if not _ready(t)]
+    if absent:
+        print(f"  压缩包中未找到可用的: {', '.join(absent)}")
+        return False
     return True
 
 

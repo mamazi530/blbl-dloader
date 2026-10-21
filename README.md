@@ -58,7 +58,7 @@ A desktop downloader for bilibili.com. It pulls the **original DASH streams** st
 | Windows | `BilibiliDownloader.exe` | 单文件，双击即可运行（无需安装）                                    |
 | macOS   | `BilibiliDownloader.dmg` | 打开 dmg，把 `BilibiliDownloader.app` 拖入 `Applications` |
 
-> 注意：`bin/` 目录（内含 yt-dlp 与 ffmpeg）必须与可执行文件平级存在，缺了会提示「未找到 yt-dlp」。
+> 注意：`bin/` 目录（内含 yt-dlp、ffmpeg 与 ffprobe）必须与可执行文件平级存在，缺了会提示「未找到 yt-dlp」。
 
 ### 方式二：从源码运行
 
@@ -75,7 +75,7 @@ source .venv/bin/activate
 # 2) 安装 Python 依赖
 pip install -r requirements.txt
 
-# 3) 准备 bin/ 下的 yt-dlp 与 ffmpeg（约 87MB，不入库）
+# 3) 准备 bin/ 下的 yt-dlp、ffmpeg 与 ffprobe（约 218MB，不入库）
 python download_deps.py
 
 # 4) 启动
@@ -132,7 +132,7 @@ BilibiliDownloader/
 ├── run.py                  入口（PyInstaller 也用它）
 ├── verify.py               验收自检（54 项：主题/队列/持久化/静态检查）
 ├── screenshot.py           四页面自动截图
-├── download_deps.py        下载 yt-dlp / ffmpeg 到 bin/
+├── download_deps.py        下载 yt-dlp / ffmpeg / ffprobe 到 bin/
 ├── requirements.txt        Python 依赖
 ├── BilibiliDownloader.spec PyInstaller 打包配置
 ├── README.md               本文件

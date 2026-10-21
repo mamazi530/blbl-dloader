@@ -186,7 +186,7 @@ class Downloader:
         self.ytdlp = find_ytdlp()
         # 最近一次下载的成片路径（尽力而为，供 UI「打开文件」用）
         self.last_output: Optional[Path] = None
-        # bin/ 里通常只有 ffmpeg、没有 ffprobe；嵌封面必须两个都在
+        # bin/ 里应有 ffprobe（download_deps.py 会一并下载）；嵌封面必须 ffmpeg + ffprobe 都在
         self.has_ffprobe = self._detect_ffprobe()
 
     def _detect_ffprobe(self) -> bool:
@@ -286,7 +286,7 @@ class Downloader:
             cmd += ["--write-subs", "--write-auto-subs", "--sub-langs", "zh.*,en.*", "--embed-subs"]
         if want_thumbnail:
             # 只保存封面，不强嵌。嵌封面（--embed-thumbnail）需要 ffmpeg + ffprobe，
-            # 而 bin/ 里通常只有 ffmpeg → yt-dlp 末尾报
+            # 缺 ffprobe 时 yt-dlp 末尾报
             # "Unable to embed using ffprobe & ffmpeg" 并以非 0 退出，
             # 此时视频其实已合并完成，会被误判为失败（BUG-009）。有 ffprobe 才嵌。
             cmd += ["--write-thumbnail"]

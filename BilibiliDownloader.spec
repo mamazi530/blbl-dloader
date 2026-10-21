@@ -8,7 +8,7 @@
 #     误报；.app 目录结构是 mac 的惯例，再由 CI 打成 dmg 分发。
 #
 # 红线：
-#   - bin/（yt-dlp 与 ffmpeg）必须随包，缺失则下载功能不可用；
+#   - bin/（yt-dlp、ffmpeg 与 ffprobe）必须随包，缺失则下载功能不可用；
 #   - bilidownloader/assets/ 必须随包，缺失则界面图标全部变成空白方块；
 #   - 不得把 data/ 打进包（含用户 cookies 凭证）。
 

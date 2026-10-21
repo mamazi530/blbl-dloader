@@ -28,7 +28,7 @@ python -m venv .venv
 # macOS:    source .venv/bin/activate
 
 pip install -r requirements.txt
-python download_deps.py     # 准备 bin/ 下的 yt-dlp 与 ffmpeg（约 87MB，不入库）
+python download_deps.py     # 准备 bin/ 下的 yt-dlp、ffmpeg 与 ffprobe（约 218MB，不入库）
 python run.py               # 启动
 ```
 
@@ -85,7 +85,7 @@ python screenshot.py    # 产出 data/screenshots/ 共 12 张，用于与设计�
 | 路径 | 原因 |
 |---|---|
 | `data/` | 用户数据目录，**含 `cookies.txt` 登录凭证**，泄露等同账号被盗 |
-| `bin/` | yt-dlp / ffmpeg 二进制，体积大，用 `download_deps.py` 获取 |
+| `bin/` | yt-dlp / ffmpeg / ffprobe 二进制，体积大，用 `download_deps.py` 获取 |
 | `dist/`、`build/` | 打包产物 |
 | `*.spec.bak` | PyInstaller 备份文件 |
 | `__pycache__/` | Python 缓存 |
