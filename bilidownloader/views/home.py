@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
-from ..downloader import human_speed, parse_size, fmt_duration
+from ..downloader import QUALITY_CHOICES, human_speed, parse_size, fmt_duration
 from ..queue_manager import Task, TaskState
 from .widgets import Chip, IconButton, StateBadge, fetch_cover_async
 
@@ -392,7 +392,11 @@ class ParseCard(QFrame):
         right = QVBoxLayout()
         right.setSpacing(10)
         self.quality = QComboBox()
-        self.quality.addItems(["最高画质", "1080P 高码率", "720P", "480P", "仅音频"])
+        self.quality.addItems(QUALITY_CHOICES)
+        default_q = self.view.settings.get("default_quality") or "最高画质"
+        idx = self.quality.findText(default_q)
+        if idx >= 0:
+            self.quality.setCurrentIndex(idx)
         right.addWidget(self.quality)
         self.btn_add = QPushButton(" 加入下载队列")
         self.btn_add.setObjectName("primary")
@@ -487,6 +491,7 @@ class HomeView(QWidget):
         self._parse_worker = None
         self._info_timer = None
         self._rows: dict[str, TaskRow] = {}
+        self._done_only = False     # 侧边栏「已完成」筛选
         self._build()
         self.retheme(palette)
 
@@ -692,12 +697,35 @@ class HomeView(QWidget):
         self.manager.add_task(task)
 
     # ---------- 队列渲染 ----------
+    def set_queue_filter(self, done_only: bool):
+        """侧边栏「已完成」= 只显示已完成；「下载中」恢复显示全部"""
+        self._done_only = done_only
+        self._apply_filter()
+
+    def _apply_filter(self):
+        visible = 0
+        for row in self._rows.values():
+            show = not self._done_only or row.task.state == TaskState.DONE
+            row.setVisible(show)
+            visible += 1 if show else 0
+        if visible == 0:
+            self.empty_hint.setText(
+                "暂无已完成任务" if self._done_only
+                else "暂无下载任务——粘贴链接并解析后，加入队列即可开始")
+        self.empty_hint.setVisible(visible == 0)
+
+    def _on_task_updated(self):
+        if self._done_only:
+            self._apply_filter()
+
     def _add_row(self, task: Task):
         row = TaskRow(task, self, self.p)
         self._rows[task.id] = row
         self.queue_lay.insertWidget(self.queue_lay.count() - 1, row)
+        task.updated.connect(self._on_task_updated)
         self.empty_hint.setVisible(False)
         self._refresh_footer()
+        self._apply_filter()
 
     def _remove_row(self, task_id: str):
         row = self._rows.pop(task_id, None)
@@ -707,6 +735,7 @@ class HomeView(QWidget):
         if not self._rows:
             self.empty_hint.setVisible(True)
         self._refresh_footer()
+        self._apply_filter()
 
     def _clear_done(self):
         self.manager.clear_done()
@@ -729,7 +758,7 @@ class HomeView(QWidget):
         self.btn_pause_all.setEnabled(c["running"] > 0)
         self.btn_clear.setEnabled(c["done"] > 0)
         # 队列标题徽标
-        self.q_title.setText(f"下载队列")
+        self.q_title.setText("已完成任务" if self._done_only else "下载队列")
 
     def open_download_dir(self):
         import os

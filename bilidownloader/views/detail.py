@@ -323,7 +323,7 @@ class DetailView(QWidget):
 
         # 选项 chips（构建时还没有 palette 外的依赖，retheme 统一着色）
         self.chips_quality = OptionChips(
-            ["360P", "720P", "1080P 高码率", "4K · 大会员"], self.p,
+            ["最高画质", "1080P 高码率", "720P", "480P", "360P", "4K · 大会员"], self.p,
             disabled_items={"4K · 大会员": "需要大会员账号登录后可用"})
         self.chips_quality.changed.connect(lambda _: self._update_summary())
         self.chips_format = OptionChips(["MP4", "FLV", "仅音频 MP3"], self.p,
@@ -454,12 +454,14 @@ class DetailView(QWidget):
         quality = self.chips_quality.value()
         base = self._canon_url(self.info)
         sub_mode = self.chips_sub.value()
+        sub_langs = {"简体中文": "zh.*", "中英双语": "zh.*,en.*"}.get(sub_mode, "")
         for r in rows:
             url = base if len(self.pages) <= 1 else f"{base}?p={r.index}"
             task = Task(
                 url, self.settings.get("download_dir"),
                 quality="仅音频" if "仅音频" in self.chips_format.value() else quality,
-                subtitle=sub_mode != "不下载",
+                subtitle=bool(sub_langs),
+                sub_langs=sub_langs or "zh.*,en.*",
                 thumbnail=True,
                 danmaku=self.switch_danmaku.isChecked(),
                 page_index=r.index if len(self.pages) > 1 else None,

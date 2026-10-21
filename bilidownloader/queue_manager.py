@@ -29,13 +29,14 @@ class Task(QObject):
     def __init__(self, url: str, output_dir, quality: str = "最高画质",
                  subtitle: bool = True, thumbnail: bool = True,
                  danmaku: bool = False, page_index: int = None,
-                 page_title: str = ""):
+                 page_title: str = "", sub_langs: str = "zh.*,en.*"):
         super().__init__()
         self.id = uuid.uuid4().hex[:12]
         self.url = url
         self.output_dir = str(output_dir)
         self.quality = quality
         self.subtitle = subtitle
+        self.sub_langs = sub_langs or "zh.*,en.*"
         self.thumbnail = thumbnail
         self.danmaku = danmaku
         self.page_index = page_index          # 分 P 序号（1 起）；None = 整个视频
@@ -91,15 +92,6 @@ class DownloadWorker(QThread):
         t = self.task
         code = -1
         try:
-            from .downloader import fetch_danmaku
-            if t.danmaku:
-                from pathlib import Path
-                bvid = t.url.split("BV")[-1][:12]
-                fetch_danmaku(
-                    f"BV{bvid}",
-                    page=t.page_index or 1,
-                    output_path=Path(t.output_dir) / f"{t.title}_P{t.page_index or 1} 弹幕.xml",
-                )
             code = self.dl.download(
                 t.url, t.output_dir, t.quality, self.cookie_file,
                 want_subtitle=t.subtitle, want_thumbnail=t.thumbnail,
@@ -107,6 +99,7 @@ class DownloadWorker(QThread):
                 cancel_flag=lambda: t.pause_requested or t.remove_requested,
                 rate_limit=self.rate_limit, proxy=self.proxy or None,
                 auto_merge=self.auto_merge, cmd=t._cmd,
+                sub_langs=t.sub_langs,
             )
             # 记下成片路径与真实大小，供「已完成」行打开文件 / 显示体积
             # （直接写属性、不发信号：这里还在工作线程，_on_done 会统一 emit）
@@ -119,8 +112,18 @@ class DownloadWorker(QThread):
                     if p.exists():
                         t.filepath = str(p)
                         t.size_text = human_size(p.stat().st_size)
+                        if t.danmaku:
+                            # 成片同名 .xml（与 README 描述一致），避免标题被 yt-dlp 改写后对不上
+                            from .downloader import fetch_danmaku
+                            bvid = t.url.split("BV")[-1][:12]
+                            fetch_danmaku(
+                                f"BV{bvid}", page=t.page_index or 1,
+                                output_path=p.with_suffix(".xml"),
+                            )
                 except OSError:
                     pass
+                except Exception as exc:
+                    self.log.emit(f"弹幕保存失败: {exc}")
         except Exception as exc:
             self.log.emit(f"下载异常: {exc}")
             code = -1
@@ -274,6 +277,7 @@ class QueueManager(QObject):
                 self.settings.get("rate_limit", ""),
                 self.settings.proxy_url() or None,
                 self.settings.get("auto_merge", True),
+                t.sub_langs,
             )
         worker.start()
 

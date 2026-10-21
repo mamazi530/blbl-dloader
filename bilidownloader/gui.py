@@ -304,7 +304,8 @@ class Sidebar(QFrame):
         self.nav_fav = NavItem("star", "收藏夹", palette, enabled=False)
         for n in (self.nav_downloading, self.nav_done, self.nav_fav):
             lay.addWidget(n)
-            n.clicked.connect(lambda _, k="home": self.navigate.emit(k))
+        self.nav_downloading.clicked.connect(lambda: self.navigate.emit("home"))
+        self.nav_done.clicked.connect(lambda: self.navigate.emit("done"))
         lay.addSpacing(10)
 
         group_label("工具")
@@ -561,20 +562,24 @@ class MainWindow(FramelessMixin, QMainWindow):
 
     # ---------- 导航 ----------
     def navigate(self, key: str):
+        filter_done = key == "done"
+        key = "home" if filter_done else key
         views = {"home": self.view_home, "detail": self.view_detail,
                  "settings": self.view_settings, "login": self.view_login}
         if key != "login":
             self._prev_page = key
         idx = list(views).index(key)
         self.stack.setCurrentIndex(idx)
-        self._update_nav_selection(key)
+        if key == "home":
+            self.view_home.set_queue_filter(filter_done)
+        self._update_nav_selection(key, filter_done)
         if key == "login":
             # BUG-002：进入登录页时按当前登录态展示（已登录则显示账号与退出）
             self.view_login.refresh_state()
 
-    def _update_nav_selection(self, key):
-        self.sidebar.nav_downloading.set_selected(key in ("home", "detail"))
-        self.sidebar.nav_done.set_selected(False)
+    def _update_nav_selection(self, key, done_only=False):
+        self.sidebar.nav_downloading.set_selected(key in ("home", "detail") and not done_only)
+        self.sidebar.nav_done.set_selected(done_only)
         self.sidebar.nav_settings.set_selected(key == "settings")
 
     def _open_detail(self, info: dict):

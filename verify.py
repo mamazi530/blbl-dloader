@@ -61,7 +61,7 @@ class FakeDownloader:
     def download(self, task_url, out, quality, cookie, want_subtitle=True,
                  want_thumbnail=True, on_log=None, on_progress=None,
                  cancel_flag=None, rate_limit="", proxy=None, auto_merge=True,
-                 cmd=None):
+                 cmd=None, sub_langs="zh.*,en.*"):
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         for i in range(20):

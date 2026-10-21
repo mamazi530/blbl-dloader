@@ -26,7 +26,7 @@ A desktop downloader for bilibili.com. It pulls the **original DASH streams** st
 
 **画质与输出**
 
-- 画质预设：最高可用 / 1080P 高码率 / 720P / 480P / 仅音频
+- 画质预设：最高可用 / 4K（大会员）/ 1080P 高码率 / 720P / 480P / 360P / 仅音频
 - 字幕与封面嵌入
 - XML 弹幕下载（与视频同名 `.xml` 相伴保存）
 

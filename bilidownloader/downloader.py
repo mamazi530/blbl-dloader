@@ -60,7 +60,8 @@ QUALITY_MAP = {
     "1080P": "bv*[height<=1080]+ba/b[height<=1080]",
     "720P": "bv*[height<=720]+ba/b[height<=720]",
     "480P": "bv*[height<=480]+ba/b[height<=480]",
-    "360P": "bv*[height<=480]+ba/b[height<=480]",
+    "360P": "bv*[height<=360]+ba/b[height<=360]",
+    "4K · 大会员": "bv*[height<=2160]+ba/b[height<=2160]",
     "仅音频": "ba/b",
 }
 
@@ -264,6 +265,7 @@ class Downloader:
         rate_limit: str = "",
         proxy: Optional[str] = None,
         auto_merge: bool = True,
+        sub_langs: str = "zh.*,en.*",
     ) -> list:
         """拼装 yt-dlp 下载命令（暂停/继续就是重启同一命令，天然断点续传）"""
         output_dir = Path(output_dir)
@@ -283,7 +285,8 @@ class Downloader:
         if rate_limit:
             cmd += ["--limit-rate", rate_limit]
         if want_subtitle:
-            cmd += ["--write-subs", "--write-auto-subs", "--sub-langs", "zh.*,en.*", "--embed-subs"]
+            cmd += ["--write-subs", "--write-auto-subs",
+                    "--sub-langs", sub_langs or "zh.*,en.*", "--embed-subs"]
         if want_thumbnail:
             # 只保存封面，不强嵌。嵌封面（--embed-thumbnail）需要 ffmpeg + ffprobe，
             # 缺 ffprobe 时 yt-dlp 末尾报
@@ -310,6 +313,7 @@ class Downloader:
         proxy: Optional[str] = None,
         auto_merge: bool = True,
         cmd: Optional[list] = None,
+        sub_langs: str = "zh.*,en.*",
     ) -> int:
         """
         执行下载。
@@ -323,6 +327,7 @@ class Downloader:
             cmd = self.build_download_cmd(
                 url, output_dir, quality, cookie_file,
                 want_subtitle, want_thumbnail, rate_limit, proxy, auto_merge,
+                sub_langs,
             )
 
         if on_log:
