@@ -141,6 +141,8 @@ class SettingsView(QWidget):
 
         self.page_title = QLabel("设置")
         root.addWidget(self.page_title)
+        self.page_hint = QLabel("所有修改即时生效并自动保存")
+        root.addWidget(self.page_hint)
 
         # ===== 外观与皮肤 =====
         g0 = self._card("外观与皮肤")
@@ -467,6 +469,8 @@ class SettingsView(QWidget):
     def retheme(self, p):
         self.p = p
         self.page_title.setStyleSheet(f"color:{p.text}; font-size:16px; font-weight:700; background:transparent;")
+        self.page_hint.setStyleSheet(
+            f"color:{p.text_muted}; font-size:12px; background:transparent;")
         for w in self.findChildren(QFrame):
             if w.objectName() == "GroupCard":
                 w.setStyleSheet(f"""

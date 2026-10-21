@@ -648,8 +648,14 @@ class HomeView(QWidget):
         self.parse_hint.setStyleSheet(
             f"color:{color}; font-size:12px; font-weight:{weight}; background:transparent;")
 
+    def _set_parse_busy(self, busy: bool):
+        self.btn_parse.setText(" 解析中…" if busy else " 解析")
+        self.btn_parse.setEnabled(
+            not busy and url_is_valid(self.input_url.text()))
+
     def _on_url_changed(self, text):
-        self.btn_parse.setEnabled(url_is_valid(text))
+        busy = self._parse_worker is not None and self._parse_worker.isRunning()
+        self.btn_parse.setEnabled(not busy and url_is_valid(text))
         if not url_is_valid(text):
             self.parse_card.hide()
             self._set_parse_hint("")
@@ -672,6 +678,7 @@ class HomeView(QWidget):
         if self._parse_worker is not None and self._parse_worker.isRunning():
             return
         self._set_parse_hint("解析中…")
+        self._set_parse_busy(True)
         self.parse_card.hide()
         self._parse_worker = ParseWorker(
             self.dl, url,
@@ -681,9 +688,11 @@ class HomeView(QWidget):
         self._parse_worker.start()
 
     def _on_parse_fail(self, msg):
+        self._set_parse_busy(False)
         self._set_parse_hint(f"解析失败：{msg[:120]}", error=True)
 
     def _on_parsed(self, info: dict):
+        self._set_parse_busy(False)
         self._set_parse_hint("")
         self.parse_card.show_info(info)
 
