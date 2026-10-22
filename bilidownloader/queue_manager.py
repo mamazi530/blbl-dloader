@@ -41,6 +41,7 @@ class Task(QObject):
         self.danmaku = danmaku
         self.page_index = page_index          # 分 P 序号（1 起）；None = 整个视频
         self.page_title = page_title
+        self.no_subs = False                  # 请求了字幕但成片里没有，用于界面提示
 
         self.title = page_title or "解析中…"
         self.cover_url = ""
@@ -112,6 +113,9 @@ class DownloadWorker(QThread):
                     if p.exists():
                         t.filepath = str(p)
                         t.size_text = human_size(p.stat().st_size)
+                        if t.subtitle:
+                            # 无 CC/AI 字幕时 yt-dlp 静默跳过，这里标记出来供界面提示
+                            t.no_subs = not self.dl.has_subtitle_stream(p)
                         if t.danmaku:
                             # 成片同名 .xml（与 README 描述一致），避免标题被 yt-dlp 改写后对不上
                             from .downloader import fetch_danmaku

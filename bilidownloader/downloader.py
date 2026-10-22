@@ -196,6 +196,28 @@ class Downloader:
                 return True
         return shutil.which("ffprobe") is not None
 
+    def has_subtitle_stream(self, video: Path) -> bool:
+        """成片是否真的带字幕（流或同名外挂字幕）。用于提示「无字幕可用」。"""
+        video = Path(video)
+        for ext in (".srt", ".vtt", ".ass"):
+            if video.with_suffix(ext).exists():
+                return True
+        probe = None
+        for name in _bin_names("ffprobe"):
+            if (Path(self.ffmpeg_dir) / name).exists():
+                probe = Path(self.ffmpeg_dir) / name
+                break
+        probe = probe or shutil.which("ffprobe")
+        if not probe:
+            return False
+        proc = subprocess.run(
+            [str(probe), "-v", "error", "-select_streams", "s",
+             "-show_entries", "stream=index", "-of", "csv=p=0", str(video)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            creationflags=_NO_WINDOW,
+        )
+        return bool((proc.stdout or "").strip())
+
     def available(self) -> bool:
         return self.ytdlp is not None
 

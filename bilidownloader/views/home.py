@@ -274,8 +274,12 @@ class TaskRow(QFrame):
         elif st == TaskState.DONE:
             # 完成态：画质 + 体积 + 状态；完整路径放 tooltip，避免长文件名挤乱行
             size = t.size_text or "已保存"
-            self.sub.setText(f"{t.quality} · {size} · 已保存")
-            self.sub.setToolTip(t.filepath or t.output_dir)
+            hint = " · 未获取到字幕" if getattr(t, "no_subs", False) else ""
+            self.sub.setText(f"{t.quality} · {size} · 已保存{hint}")
+            tip = t.filepath or t.output_dir
+            if getattr(t, "no_subs", False):
+                tip += "\n该视频没有可用的中英文字幕；登录后可能提供 AI 字幕。"
+            self.sub.setToolTip(tip)
         elif st == TaskState.FAILED:
             self.sub.setText(t.error or "下载失败")
             self.sub.setToolTip(t.error or "")
